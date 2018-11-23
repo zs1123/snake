@@ -94,8 +94,6 @@ start:
     int 10H
 
     call draw_background
-    call init_snake
-    call produce_food_check
 
     call cpy_new_int9
     call save_old_int9
@@ -132,11 +130,45 @@ trin_start:
     call draw_trin
     jmp trin_start
 
+snake_over:
+
+    mov al, 0
+    mov ah, 1
+    int 16h;接收键盘
+    cmp ah, 1
+    je snake_over
+
+    mov al, 0
+    mov ah, 0
+    int 16h  ;读取按键
+
+    cmp ah,13h
+    je restart_snake
+    jmp snake_over
+
+restart_snake:
+
+    mov si,0
+    mov cx,1000
+clear_body:
+    mov word ptr body[si],0
+    add si,2
+    loop clear_body
+    mov snake_head,0
+    mov food,0
+
+    call clear_snake_screen
+    jmp init
+in_key_end:
+
+ret
 
 ; 初始化代码
 ; 该代码完成    初始化三角形程序栈空间   开始运行贪吃蛇程序
 init:
 
+    call init_snake
+    call produce_food_check
     ; 初始化三角形程序栈空间 
     mov ax,trin_stack
     mov ss,ax
@@ -150,8 +182,13 @@ init:
     push bx
     push cx
     push dx
+    push bp
     push si
     push di
+    push ds
+    push es
+    mov s_sp,128
+    mov t_sp,104
     ; 切换为贪吃蛇程序栈
     mov ax,snake_stack
     mov ss,ax
@@ -160,6 +197,7 @@ init:
     jmp snake_start
 
 in_key:
+
     mov al, 0
     mov ah, 1
     int 16h;接收键盘
@@ -169,6 +207,9 @@ in_key:
     mov al, 0
     mov ah, 0
     int 16h;  ;读取按键
+
+    cmp ah,13h
+    je restart_snake
 
     cmp ah,key[0]
     je modify
@@ -184,18 +225,26 @@ modify:
     mov direction,ah
     jmp in_key_end
 
-in_key_end:
-
-ret
 
 process_end:
-
+    pop di
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    pop ax
 ret
+
 
 
 ; 对蛇头进行处理
 process_head:
-    
+    push ax
+    push bx
+    push cx
+    push dx
+    push si
+    push di
     mov ax,0
     mov ah,direction ;判断方向
     cmp ah,key[0]
@@ -226,8 +275,12 @@ right:
 ;=======================================
 ; 游戏结束
 game_over:
-    call restore_new_int9
-
+    pop di
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    pop ax
     mov ah,2
     mov bh,0
     mov dh,5
@@ -237,9 +290,7 @@ game_over:
     mov dx,offset over
     mov ah,9
     int 21h
-
-    mov ax,4c00h
-    int 21h
+    jmp snake_over
 ;=======================================
 ; 检测碰撞
 check:
@@ -251,7 +302,7 @@ check:
     je game_over
     cmp ah,0ffh
     je game_over
-    cmp ah,27
+    cmp ah,26
     je game_over
 
     ; 检查是否碰到身体
@@ -298,10 +349,14 @@ processbody:
     ; 更新蛇头
 process_body_end:
     mov bx,snake_head
+    push ax
+    mov al,7
+    call out_snake_point
+    pop ax
     mov body[si-2],bx
     mov snake_head,ax
     mov bx,ax
-    mov al,7
+    mov al,2
     call out_snake_point
     jmp process_end
 eat_food:
@@ -319,11 +374,15 @@ eatfood:
 eat_update:
     mov bx,snake_head
     mov body[si],bx
+    push ax
+    mov al,7
+    call out_snake_point
+    pop ax
     ; 更新蛇头
     mov snake_head,ax
 
     mov bx,ax
-    mov al,7
+    mov al,2
     call out_snake_point
     ; 重新生成食物
     call produce_food_check
@@ -332,19 +391,24 @@ eat_update:
 ;==========================================
 ; 生成食物并检车
 produce_food_check:
+
+    push ax
+    push bx
+    push si
+
 ; 重新生成食物
 reproduce:
     call produce_food
     ; 检查是否在边界上
     cmp bh,0ffh
-    je reproduce
+    jle reproduce
     cmp bh,22
-    je reproduce
+    jge reproduce
 
     cmp bl,0    
-    je reproduce
+    jle reproduce
     cmp bl,27
-    je reproduce
+    jge reproduce
 
     ; 检查是否在蛇身体上
     mov si,0
@@ -370,20 +434,24 @@ on_body_end:
     ; 绘制食物
     mov al,7
     call out_snake_point
-
+    pop si
+    pop bx
+    pop ax
 ret
 ;==========================================
 ; 产生食物
+; 返回值    bh : 行   bl: 列 
 produce_food:
     push ax
     ; 获取随机数
-    mov ax,0
-    mov al,22   
+    xor ax,ax
+    mov al,26   
     call get_random
-    dec al
     mov bh,al
 
-    mov al,26
+    xor ax,ax
+    mov al,21
+    inc al
     call get_random
     mov bl,al
     
@@ -392,10 +460,22 @@ produce_food:
 ret
 ;==========================================
 get_random:
-    ;产生从1到AX之间的随机数
-    mov dx, 41H 
-    out dx, ax  
-    in al, dl   ;产生的随机数AL
+    ; ;产生从1到AX之间的随机数
+    ; mov dx, 41H 
+    ; out dx, ax  
+    ; in al, dl   ;产生的随机数AL
+    push cx
+    push dx
+    mov cl,al
+    MOV AX,0 ;间隔计时器  
+    OUT 43H,AL ; 经由连接埠43H  
+    IN al,40H ;作两次连接埠40H  
+    IN al,40H ; 的取用  
+    mov ah,0
+    div cl
+    mov al,ah
+    pop dx
+    pop cx
 ret
 
 
@@ -404,6 +484,7 @@ ret
 ;   绘制蛇的一个点
 ;  参数 : bh: 行 bl:列 al:颜色
 out_snake_point:
+    push ax
     push bx
     push cx
     push dx
@@ -417,6 +498,7 @@ out_snake_point:
     pop dx
     pop cx
     pop bx
+    pop ax
 
 ret
 
@@ -427,6 +509,7 @@ draw_snake_point:
     push ax
     push bx
     push cx
+    push dx
     push si
     push di
     push ax
@@ -456,6 +539,7 @@ drawsnakepoint:
 
     pop di
     pop si
+    pop dx
     pop cx
     pop bx
     pop ax
@@ -511,13 +595,16 @@ ret
 ;==========================================
 ; 初始化蛇
 init_snake:
+    push ax
     push bx
     push cx
     push di
 
     ; 设置蛇头
+    mov direction,4bh
     mov bx,0c0ah
-    mov snake_head[0],bx
+    mov snake_head,bx
+    mov al,7
     call out_snake_point
 
     mov cx,3
@@ -537,6 +624,7 @@ initsnake:
     pop di
     pop cx
     pop bx
+    pop ax
 ret
 ;==========================================
 
@@ -557,7 +645,7 @@ do0:
     ;下边界
     mov si,0
     mov di,320
-    mov dx,194
+    mov dx,191
     mov cx,9
 do1:
     call draw_h_line
@@ -671,8 +759,12 @@ newint9:
     push bx
     push cx
     push dx
+    push bp
     push si
     push di
+    push ds
+    push es
+    
 
     mov ax,sp
     mov s_sp,ax
@@ -686,7 +778,7 @@ newint9:
     jmp save_end
 ;   三角形程序在运行
 save_trin:
-    ;call clear_buff
+    
     ; 保存寄存器信息在栈中
     mov ax,ss
     mov t_ss,ax
@@ -694,8 +786,11 @@ save_trin:
     push bx
     push cx
     push dx
+    push bp
     push si
     push di
+    push ds
+    push es
 
 
     ; 恢复 寄存器
@@ -709,15 +804,16 @@ save_trin:
     mov sp,ax
 
 save_end:
+    pop es
+    pop ds
     pop di
     pop si
+    pop bp
     pop dx
     pop cx
     pop bx
     not byte ptr exe ;切换程序
 
-    mov ah,0
-    int 16h ;从键盘缓冲区删除Tab
 
 new_int9_ret:
     pop ax
@@ -725,28 +821,27 @@ iret
 
 
 exit:
-
+    mov ah,0
+    int 16h
+    mov ax,3
+    int 10h
     call restore_new_int9
-
     mov ax,4c00h
     int 21h
 
 
 restore_new_int9:
 
-    push ax
-    push ds
     mov ax,0
     mov ds,ax
 
-    cli
+
     push ds:[200h]
     pop ds:[4*9]
     push ds:[202h]
     pop ds:[4*9+2]
-    sti
-    pop ds
-    pop ax
+
+
 ret
 
 new_int9_end: nop
@@ -826,8 +921,6 @@ input:
     mov ah,7
     int 21h
 
-    cmp al,1bh
-    je exit
     cmp al,13
     je input_end
 
@@ -862,6 +955,9 @@ input:
 
 ;计算三角形三个点坐标
 input_end:
+
+    cmp cx,0
+    jle draw_trin_ret
     push cx
 
     mov ax,cx
@@ -916,6 +1012,8 @@ call clear_trin
     xor ax,ax
     mov al,7
     call draw_h_line
+
+draw_trin_ret:
 ret
 ;==========================================
 
@@ -978,6 +1076,8 @@ ret
 
 ; Bresenham's line algorithm 画线
 draw_tilt_line:
+    push ax
+    push bx
     
     mov ax,y0
     mov bx,y1
@@ -997,16 +1097,23 @@ tilt_change:
 
 plot:
     call plot_line_high
+
+    pop bx
+    pop ax
 ret
 
 
 
 clear_trin:
 
+    push ax
+    push cx
+    push dx
+    push si
+    push di
+
     mov ax,0
-
     mov dx,9
-
     mov si,161
     mov di,313
     mov al,0
@@ -1014,7 +1121,7 @@ clear_trin:
 cleartrin:
     call draw_h_line
     inc dx
-    cmp dx,193
+    cmp dx,190
     jle cleartrin
 
     mov si,0
@@ -1027,7 +1134,38 @@ do5:
     inc dx
     loop do5
 
+    pop di
+    pop si
+    pop dx
+    pop cx
+    pop ax
+
 ret
+
+clear_snake_screen:
+
+    push ax
+    push dx
+    push si
+
+    mov ax,0
+    mov dx,9
+    mov si,7;161
+    mov di,154;313
+    mov al,0
+; 清屏
+clearsnakescreen:
+    call draw_h_line
+    inc dx
+    cmp dx,190
+    jle clearsnakescreen
+
+    pop si
+    pop dx
+    pop ax
+ret
+
+
 
 codeseg ends
 
