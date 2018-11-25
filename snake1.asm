@@ -34,11 +34,10 @@ trin_stack ends
 
 data segment
     tip_msg db 'len(10,145):$'
-
     over db 'Game Over!$'
 
-    point_width dw 7
-    point_height dw 7
+    point_width dw 7    ; 蛇节点像素宽度
+    point_height dw 7   ; 蛇节点像素高度
 
     snake_head dw 0 ;蛇头坐标  
     body dw 1000 dup(0) ;蛇身坐标
@@ -70,8 +69,6 @@ data segment
     exe db 0ffh     ; 执行标记    ffh : 执行贪吃蛇    0h : 执行三角形
 data ends
 
-
-
 codeseg segment
 
 start:
@@ -100,69 +97,7 @@ start:
     call set_newint9
  
     jmp init
-
-; 贪吃蛇程序
-snake_start:    
-    mov ax,0
-    mov al,exe
-    cmp al,0
-    je snake_start
-    read_key:
-        call process_head
-        
-        ; 循环实现延时
-        mov cx,0Fh
-        a:
-            push cx
-            mov cx,0FFFh
-            a1:
-                push cx
-                call in_key
-                pop cx
-                loop a1
-            pop cx
-            loop a
-
-jmp snake_start
-
-; 三角形程序
-trin_start:
-    call draw_trin
-    jmp trin_start
-
-snake_over:
-
-    mov al, 0
-    mov ah, 1
-    int 16h;接收键盘
-    cmp ah, 1
-    je snake_over
-
-    mov al, 0
-    mov ah, 0
-    int 16h  ;读取按键
-
-    cmp ah,13h
-    je restart_snake
-    jmp snake_over
-
-restart_snake:
-
-    mov si,0
-    mov cx,1000
-clear_body:
-    mov word ptr body[si],0
-    add si,2
-    loop clear_body
-    mov snake_head,0
-    mov food,0
-
-    call clear_snake_screen
-    jmp init
-in_key_end:
-
-ret
-
+;=======================================
 ; 初始化代码
 ; 该代码完成    初始化三角形程序栈空间   开始运行贪吃蛇程序
 init:
@@ -195,7 +130,67 @@ init:
     mov sp,128
     ; 开始运行 贪吃蛇程序
     jmp snake_start
+;=======================================
+; 贪吃蛇程序
+snake_start:    
+    mov ax,0
+    mov al,exe
+    cmp al,0
+    je snake_start
+    read_key:
+        call process_head
+        
+        ; 循环实现延时
+        mov cx,0Fh
+        a:
+            push cx
+            mov cx,0FFFh
+            a1:
+                push cx
+                call in_key ;读取键盘输入
+                pop cx
+                loop a1
+            pop cx
+            loop a
 
+jmp snake_start
+;=======================================
+; 三角形程序
+trin_start:
+    call draw_trin
+    jmp trin_start
+;=======================================
+; 贪吃蛇程序结束
+snake_over:
+
+    mov al, 0
+    mov ah, 1
+    int 16h;接收键盘
+    cmp ah, 1
+    je snake_over
+
+    mov al, 0
+    mov ah, 0
+    int 16h  ;读取按键
+
+    cmp ah,13h
+    je restart_snake ;重新开始
+    jmp snake_over
+
+restart_snake:
+    mov si,0
+    mov cx,1000
+clear_body:
+    mov word ptr body[si],0
+    add si,2
+    loop clear_body  ; 清除body 数据
+    mov snake_head,0
+    mov food,0
+
+    call clear_snake_screen
+    jmp init
+;=======================================
+; 接受键盘输入
 in_key:
 
     mov al, 0
@@ -225,19 +220,30 @@ modify:
     mov direction,ah
     jmp in_key_end
 
+in_key_end:
 
-process_end:
+ret
+;=======================================
+; 游戏结束
+game_over:
     pop di
     pop si
     pop dx
     pop cx
     pop bx
     pop ax
-ret
+    mov ah,2
+    mov bh,0
+    mov dh,5
+    mov dl,5
+    int 10h         ;设置光标位置
 
-
-
-; 对蛇头进行处理
+    mov dx,offset over
+    mov ah,9
+    int 21h
+    jmp snake_over
+;=======================================
+; 对蛇进行移动处理
 process_head:
     push ax
     push bx
@@ -272,25 +278,6 @@ right:
     mov ax,snake_head
     inc al
     jmp check
-;=======================================
-; 游戏结束
-game_over:
-    pop di
-    pop si
-    pop dx
-    pop cx
-    pop bx
-    pop ax
-    mov ah,2
-    mov bh,0
-    mov dh,5
-    mov dl,5
-    int 10h         ;设置光标位置
-
-    mov dx,offset over
-    mov ah,9
-    int 21h
-    jmp snake_over
 ;=======================================
 ; 检测碰撞
 check:
@@ -389,7 +376,7 @@ eat_update:
     jmp process_end
 
 ;==========================================
-; 生成食物并检车
+; 生成食物并检测
 produce_food_check:
 
     push ax
@@ -430,7 +417,6 @@ on_body_end:
 
     ; 食物位置正确  检查结束
     mov food,bx
-    ;call show_hex
     ; 绘制食物
     mov al,7
     call out_snake_point
@@ -438,6 +424,16 @@ on_body_end:
     pop bx
     pop ax
 ret
+
+process_end:
+    pop di
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+ret
+
 ;==========================================
 ; 产生食物
 ; 返回值    bh : 行   bl: 列 
@@ -459,26 +455,22 @@ produce_food:
    
 ret
 ;==========================================
+; 获取随机数  [0,al]  
+; 返回值  al
 get_random:
-    ; ;产生从1到AX之间的随机数
-    ; mov dx, 41H 
-    ; out dx, ax  
-    ; in al, dl   ;产生的随机数AL
     push cx
     push dx
     mov cl,al
-    MOV AX,0 ;间隔计时器  
-    OUT 43H,AL ; 经由连接埠43H  
-    IN al,40H ;作两次连接埠40H  
-    IN al,40H ; 的取用  
+    mov ax,0 ;
+    out 43H,AL ; 
+    in al,40H ;
+    in al,40H ; 
     mov ah,0
     div cl
     mov al,ah
     pop dx
     pop cx
 ret
-
-
 
 ;==========================================
 ;   绘制蛇的一个点
@@ -501,8 +493,7 @@ out_snake_point:
     pop ax
 
 ret
-
-
+;==========================================
 ;  具体绘制蛇的一个点
 ;  参数  cx:  列   dx: 行   al: 颜色
 draw_snake_point:
@@ -626,7 +617,475 @@ initsnake:
     pop bx
     pop ax
 ret
+
 ;==========================================
+; 三角形程序入口点
+draw_trin:
+
+    mov ah,2
+    mov bh,0
+    mov dh,0
+    mov dl,20
+    int 10h         ;设置光标位置
+
+    mov dx,offset tip_msg
+    mov ah,9
+    int 21h
+
+    mov cx,0
+
+    ;输入一个整数表示三角形边长
+input:
+    mov ah,7
+    int 21h
+
+    cmp al,13
+    je input_end
+
+    cmp al,30h
+    jb input
+    cmp al,39h
+    ja input
+    
+    mov ah,2
+    mov dl,al
+    int 21h
+
+    sub al,30h
+    mov ah,0
+    
+    mov dx,cx
+
+    add cx,cx
+    add cx,cx
+    add cx,cx
+
+    add cx,dx
+    add cx,dx ; 用加法代替乘法
+
+    add cx,ax
+    jmp input
+
+;计算三角形三个点坐标
+; 使用 7/4 代替pi
+input_end:
+
+    cmp cx,0
+    jle draw_trin_ret
+    cmp cx,10
+    jb draw_trin_ret
+    cmp cx,145
+    ja draw_trin_ret
+
+    push cx
+
+    mov ax,cx
+    mov cl,8
+
+    div cl
+    mov ah,0
+    mov cl,7
+    mul cl
+
+    mov ah,0
+
+    mov cl,2
+    div cl
+
+    mov ah,0
+
+    mov dx,100
+    sub dx,ax
+    mov y0,dx
+
+    add dx,ax
+    add dx,ax
+    mov y1,dx
+    mov y2,dx
+
+    mov dx,240
+    pop ax
+    mov cl,2
+    div cl
+    mov ah,0
+    add dx,ax
+    mov x1,dx
+    sub dx,ax
+    sub dx,ax
+    mov x2,dx
+    
+    call clear_trin ;清屏
+
+;绘制线
+    mov si,x2
+    mov di,x1
+    mov dx,y1    
+
+    call draw_tilt_line
+
+    mov ax,x2
+    mov x1,ax
+    mov ax,y2
+    mov y1,ax
+    call draw_tilt_line
+    xor ax,ax
+    mov al,7
+    call draw_h_line
+
+draw_trin_ret:
+    call clear_top_bar
+ret
+;==========================================
+
+plot_line_high:
+    mov ax,x1
+    mov bx,x0
+    sub ax,bx
+    mov xd,ax
+
+
+    mov ax,y1
+    mov bx,y0
+    sub ax,bx
+    mov yd,ax
+
+    mov xi,1
+    cmp xd,0
+    jge aaaA
+    mov xi,-1
+    not word ptr xd
+    inc word ptr xd
+    aaaA:
+        mov ax,xd
+        add ax,ax
+        mov bx,yd
+        sub ax,bx
+        mov ddd,ax
+        mov cx,x0
+        mov dx,y0
+    loo:
+        mov AH, 0CH 
+        mov AL, 7 
+        mov BH, 0 
+        int 10H
+
+        cmp ddd,0
+
+        jle bbb
+
+        add cx,xi
+
+        mov ax,yd
+        add ax,ax
+
+        sub ddd,ax
+
+        bbb:
+            mov ax,xd
+            add ax,ax
+            add ddd,ax
+        inc dx
+        cmp dx,y1
+        jle loo
+ret
+;==========================================
+; Bresenham's line algorithm 画线
+draw_tilt_line:
+    push ax
+    push bx
+    
+    mov ax,y0
+    mov bx,y1
+    cmp ax,bx
+    jb plot
+
+
+tilt_change:
+    mov ax,x0
+    mov bx,x1
+    mov x0,bx
+    mov x1,ax
+    mov ax,y0
+    mov bx,y1
+    mov y0,bx
+    mov y1,ax
+
+plot:
+    call plot_line_high
+
+    pop bx
+    pop ax
+ret
+;==========================================
+; 三角形清屏
+clear_trin:
+
+    push ax
+    push cx
+    push dx
+    push si
+    push di
+
+    mov ax,0
+    mov dx,9
+    mov si,161
+    mov di,313
+    mov al,0
+; 清屏
+cleartrin:
+    call draw_h_line
+    inc dx
+    cmp dx,190
+    jle cleartrin
+
+    call clear_top_bar
+    pop di
+    pop si
+    pop dx
+    pop cx
+    pop ax
+ret
+
+
+clear_top_bar:
+    push ax
+    push cx
+    push dx
+    push si
+    push di
+    mov si,0
+    mov di,320
+    mov al,7
+    mov dx,0
+    mov cx,9
+do5:
+    call draw_h_line
+    inc dx
+    loop do5
+    pop di
+    pop si
+    pop dx
+    pop cx
+    pop ax
+ret
+;==========================================
+;  贪吃蛇清屏
+clear_snake_screen:
+
+    push ax
+    push dx
+    push si
+    push di
+    mov ax,0
+    mov dx,9
+    mov si,7
+    mov di,154
+    mov al,0
+; 清屏
+clearsnakescreen:
+    call draw_h_line
+    inc dx
+    cmp dx,190
+    jle clearsnakescreen
+    pop di
+    pop si  
+    pop dx
+    pop ax
+ret
+;==========================================
+;  重写int9 中断
+;==========================================
+new_int9: jmp newint9
+newint9:
+    push ax
+
+    call clear_buff
+    in al,60h
+
+    pushf
+    call dword ptr cs:[200h]
+    ;  按下ESC键   退出程序
+    cmp al,01h
+    je exit
+
+    
+    cmp al,0fh
+    jne new_int9_ret
+    ;  按下Tab键   切换任务
+
+
+    cmp exe,0ffh  ; snake 程序在运行
+    jne save_trin
+
+    mov ax,ss
+    mov s_ss,ax
+
+    push bx
+    push cx
+    push dx
+    push bp
+    push si
+    push di
+    push ds
+    push es
+    
+    mov ax,sp
+    mov s_sp,ax
+
+    mov ax,t_ss
+    mov ss,ax
+
+    mov ax,t_sp
+    mov sp,ax
+
+    jmp save_end
+;   三角形程序在运行
+save_trin:
+    
+    ; 保存寄存器信息在栈中
+
+    mov ax,ss
+    mov t_ss,ax
+
+    push bx
+    push cx
+    push dx
+    push bp
+    push si
+    push di
+    push ds
+    push es
+
+
+    ; 恢复 寄存器
+    mov ax,sp
+    mov t_sp,ax
+
+    mov ax,s_ss
+    mov ss,ax
+
+    mov ax,s_sp
+    mov sp,ax
+
+save_end:
+    pop es
+    pop ds
+    pop di
+    pop si
+    pop bp
+    pop dx
+    pop cx
+    pop bx
+    not byte ptr exe ;切换程序
+
+
+new_int9_ret:
+    pop ax
+iret
+; 程序退出
+exit:
+    mov ah,0
+    int 16h
+    mov ax,3
+    int 10h
+    call restore_new_int9
+    mov ax,4c00h
+    int 21h
+
+; 恢复旧int9
+restore_new_int9:
+    push ax
+    push ds
+    mov ax,0
+    mov ds,ax
+    cli
+    push ds:[200h]
+    pop ds:[4*9]
+    push ds:[202h]
+    pop ds:[4*9+2]
+    sti
+    pop ds
+    pop ax
+ret
+
+; 清除键盘缓冲区
+clear_buff:
+
+    mov ah,1
+    int 16h
+    jz clear_buff_ret
+    mov ah,0
+    int 16h
+    jmp clear_buff
+
+clear_buff_ret:
+ret
+
+new_int9_end: nop
+;==========================================
+;  copy新的int9 中断到0:7e00 处
+;==========================================
+cpy_new_int9:
+    push ax
+    push cx
+    push ds
+    push es
+    push si
+    push di
+    mov ax,cs
+    mov ds,ax
+    mov ax,0
+    mov es,ax
+    mov si,offset new_int9
+    mov cx,offset new_int9_end - offset new_int9
+    mov di,07e00h
+    cld
+    rep movsb
+    pop di
+    pop si
+    pop es
+    pop ds
+    pop cx
+    pop ax
+ret
+;==========================================
+;   设置新int9 中断
+;==========================================
+set_newint9:
+
+    push ax
+    push ds
+    mov ax,0
+    mov ds,ax
+
+    cli
+    mov word ptr ds:[4*9],7e00h
+    mov word ptr ds:[4*9+2],0
+    sti
+
+    pop ds
+    pop ax
+ret
+;==========================================
+;  保存旧int9中断
+;==========================================
+save_old_int9:
+    push ax
+    push ds
+    mov ax,0
+    mov ds,ax
+
+    cli
+    push ds:[4*9]
+    pop ds:[200h]
+    push ds:[4*9+2]
+    pop ds:[202h]
+    sti
+
+    pop ds
+    pop ax
+ret
+
 
 ;绘制背景
 draw_background:
@@ -689,483 +1148,6 @@ do4:
     cmp bx,7
     jne do4
 ret
-
-
-;   设置新int9 中断
-;==========================================
-set_newint9:
-
-    push ax
-    push ds
-    mov ax,0
-    mov ds,ax
-
-    cli
-    mov word ptr ds:[4*9],7e00h
-    mov word ptr ds:[4*9+2],0
-    sti
-
-    pop ds
-    pop ax
-ret
-
-;  保存旧int9中断
-;==========================================
-save_old_int9:
-    push ax
-    push ds
-    mov ax,0
-    mov ds,ax
-
-    cli
-    push ds:[4*9]
-    pop ds:[200h]
-    push ds:[4*9+2]
-    pop ds:[202h]
-    sti
-
-    pop ds
-    pop ax
-ret
-
-
-;  重写int9 中断
-;==========================================
-new_int9: jmp newint9
-
-
-newint9:
-    push ax
-
-    in al,60h
-
-    pushf
-    call dword ptr cs:[200h]
-    ;  按下ESC键   退出程序
-    cmp al,01h
-    je exit
-    
-    cmp al,0fh
-    jne new_int9_ret
-    ;  按下Tab键   切换任务
-
-
-    cmp exe,0ffh  ; snake 程序在运行
-    jne save_trin
-
-    mov ax,ss
-    mov s_ss,ax
-
-    push bx
-    push cx
-    push dx
-    push bp
-    push si
-    push di
-    push ds
-    push es
-    
-
-    mov ax,sp
-    mov s_sp,ax
-
-    mov ax,t_ss
-    mov ss,ax
-
-    mov ax,t_sp
-    mov sp,ax
-
-    jmp save_end
-;   三角形程序在运行
-save_trin:
-    
-    ; 保存寄存器信息在栈中
-    mov ax,ss
-    mov t_ss,ax
-
-    push bx
-    push cx
-    push dx
-    push bp
-    push si
-    push di
-    push ds
-    push es
-
-
-    ; 恢复 寄存器
-    mov ax,sp
-    mov t_sp,ax
-
-    mov ax,s_ss
-    mov ss,ax
-
-    mov ax,s_sp
-    mov sp,ax
-
-save_end:
-    pop es
-    pop ds
-    pop di
-    pop si
-    pop bp
-    pop dx
-    pop cx
-    pop bx
-    not byte ptr exe ;切换程序
-
-
-new_int9_ret:
-    pop ax
-iret
-
-
-exit:
-    mov ah,0
-    int 16h
-    mov ax,3
-    int 10h
-    call restore_new_int9
-    mov ax,4c00h
-    int 21h
-
-
-restore_new_int9:
-
-    mov ax,0
-    mov ds,ax
-
-
-    push ds:[200h]
-    pop ds:[4*9]
-    push ds:[202h]
-    pop ds:[4*9+2]
-
-
-ret
-
-new_int9_end: nop
-
-;==========================================
-
-
-
-;  copy新的int9 中断到0:7e00 处
-;==========================================
-cpy_new_int9:
-    push ax
-    push cx
-    push ds
-    push es
-    push si
-    push di
-    mov ax,cs
-    mov ds,ax
-    mov ax,0
-    mov es,ax
-    mov si,offset new_int9
-    mov cx,offset new_int9_end - offset new_int9
-    mov di,07e00h
-    cld
-    rep movsb
-    pop di
-    pop si
-    pop es
-    pop ds
-    pop cx
-    pop ax
-
-ret
-
-
-clear_buff:
-
-    mov ah,1
-    int 16h
-    jz clear_buff_ret
-    mov ah,0
-    int 16h
-    jmp clear_buff
-
-clear_buff_ret:
-
-    ret
-
-;==========================================
-; 三角形程序入口点
-draw_trin:
-
-    mov ah,2
-    mov bh,0
-    mov dh,0
-    mov dl,20
-    int 10h         ;设置光标位置
-
-    mov dx,offset tip_msg
-    mov ah,9
-    int 21h
-
-
-; input_pre:
-;     mov ah,07h
-;     int 21h
-;     cmp al,13
-;     jne input_pre
-
-    call clear_buff
-
-    mov cx,0
-
-    ;输入一个整数表示三角形边长
-input:
-    mov ah,7
-    int 21h
-
-    cmp al,13
-    je input_end
-
-    cmp al,30h
-    jb input
-    cmp al,39h
-    ja input
-    
-    mov ah,2
-    mov dl,al
-    int 21h
-
-    sub al,30h
-    mov ah,0
-    
-    mov dx,cx
-
-    add cx,cx
-    add cx,cx
-    add cx,cx
-
-    add cx,dx
-    add cx,dx
-
-    add cx,ax
-    jmp input
-
-    cmp cx,10
-    jb input
-    cmp cx,145
-    ja input
-
-;计算三角形三个点坐标
-input_end:
-
-    cmp cx,0
-    jle draw_trin_ret
-    push cx
-
-    mov ax,cx
-    mov cl,8
-
-    div cl
-    mov ah,0
-    mov cl,7
-    mul cl
-
-    mov ah,0
-
-    mov cl,2
-    div cl
-
-    mov ah,0
-
-    mov dx,100
-    sub dx,ax
-    mov y0,dx
-
-    add dx,ax
-    add dx,ax
-    mov y1,dx
-    mov y2,dx
-
-    mov dx,240
-    pop ax
-    mov cl,2
-    div cl
-    mov ah,0
-    add dx,ax
-    mov x1,dx
-    sub dx,ax
-    sub dx,ax
-    mov x2,dx
-    
-call clear_trin
-
-;绘制线
-    mov si,x2
-    mov di,x1
-    mov dx,y1    
-
-    call draw_tilt_line
-
-    mov ax,x2
-    mov x1,ax
-    mov ax,y2
-    mov y1,ax
-    call draw_tilt_line
-    xor ax,ax
-    mov al,7
-    call draw_h_line
-
-draw_trin_ret:
-ret
-;==========================================
-
-plot_line_high:
-    mov ax,x1
-    mov bx,x0
-    sub ax,bx
-    mov xd,ax
-
-
-    mov ax,y1
-    mov bx,y0
-    sub ax,bx
-    mov yd,ax
-
-    mov xi,1
-    cmp xd,0
-    jge aaaA
-    mov xi,-1
-    not word ptr xd
-    inc word ptr xd
-
-
-    aaaA:
-        mov ax,xd
-        add ax,ax
-        mov bx,yd
-        sub ax,bx
-        mov ddd,ax
-        mov cx,x0
-        mov dx,y0
-    loo:
-        MOV   AH, 0CH 
-        MOV   AL, 7 
-        MOV   BH, 0 
-        INT   10H
-
-        cmp ddd,0
-
-        jle bbb
-
-        add cx,xi
-
-        mov ax,yd
-        add ax,ax
-
-        sub ddd,ax
-
-
-
-        bbb:
-            mov ax,xd
-            add ax,ax
-            add ddd,ax
-        inc dx
-        cmp dx,y1
-        jle loo
-
-ret
-
-; Bresenham's line algorithm 画线
-draw_tilt_line:
-    push ax
-    push bx
-    
-    mov ax,y0
-    mov bx,y1
-    cmp ax,bx
-    jb plot
-
-
-tilt_change:
-    mov ax,x0
-    mov bx,x1
-    mov x0,bx
-    mov x1,ax
-    mov ax,y0
-    mov bx,y1
-    mov y0,bx
-    mov y1,ax
-
-plot:
-    call plot_line_high
-
-    pop bx
-    pop ax
-ret
-
-
-
-clear_trin:
-
-    push ax
-    push cx
-    push dx
-    push si
-    push di
-
-    mov ax,0
-    mov dx,9
-    mov si,161
-    mov di,313
-    mov al,0
-; 清屏
-cleartrin:
-    call draw_h_line
-    inc dx
-    cmp dx,190
-    jle cleartrin
-
-    mov si,0
-    mov di,320
-    mov al,7
-    mov dx,0
-    mov cx,9
-do5:
-    call draw_h_line
-    inc dx
-    loop do5
-
-    pop di
-    pop si
-    pop dx
-    pop cx
-    pop ax
-
-ret
-
-clear_snake_screen:
-
-    push ax
-    push dx
-    push si
-
-    mov ax,0
-    mov dx,9
-    mov si,7;161
-    mov di,154;313
-    mov al,0
-; 清屏
-clearsnakescreen:
-    call draw_h_line
-    inc dx
-    cmp dx,190
-    jle clearsnakescreen
-
-    pop si
-    pop dx
-    pop ax
-ret
-
-
 
 codeseg ends
 
