@@ -636,20 +636,23 @@ draw_trin:
 
     ;输入一个整数表示三角形边长
 input:
-    mov ah,7
-    int 21h
+    mov al, 0
+    mov ah, 0
+    int 16h;  ;读取按键
 
     cmp al,13
-    je input_end
+    je input_end  ; 输入回车结束输入
 
     cmp al,30h
     jb input
     cmp al,39h
-    ja input
-    
+    ja input  ; 判断输入是否为数字
+
+    push dx
     mov ah,2
     mov dl,al
     int 21h
+    pop dx
 
     sub al,30h
     mov ah,0
@@ -892,6 +895,7 @@ clearsnakescreen:
     pop dx
     pop ax
 ret
+
 ;==========================================
 ;  重写int9 中断
 ;==========================================
